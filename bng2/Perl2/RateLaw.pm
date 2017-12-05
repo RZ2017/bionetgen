@@ -19,7 +19,7 @@ use Expression;
 # Class definition
 struct RateLaw =>
 {
-    Type        => '$',        # Ele, Sat, Hill, MM, Arrhenius, Function, FunctionProduct
+    Type        => '$',        # Ele, Sat, Hill, MM, Arrhenius, Function, FunctionProduct and RHS
     Constants   => '@',        # If function, first constant is the function name and the following are local args
     Factor      => '$',        # Statistical or Multiplicity factor
     TotalRate   => '$',        # If true, this ratelaw specifies the Total reaction rate.
@@ -70,8 +70,8 @@ sub newRateLaw
     my $totalRate  = @_ ? shift @_ : 0;
     my $reactants  = @_ ? shift @_ : undef;
     my $basename   = @_ ? shift @_ : "_rateLaw";
-
-    my $string_left = $$strptr;
+    my @words = split /#tag=/, $$strptr;
+    my $string_left = $words[0]; # my $string_left = $$strptr;
     my $name;
     my $rate_law_type;
     my $rate_fac = 1;
@@ -203,8 +203,13 @@ sub newRateLaw
                 # check for local functions
                 if ( $totalRate   and  $expr->checkLocalDependency($model->ParamList) )
                 {   return undef, "TotalRate keyword is not compatible with local functions.";   }
-                
-                $rate_law_type = "Function";
+                if((scalar @words ge 2) and $words[1] eq 'RHS') 
+                {
+                    $rate_law_type = "RHSFunction";
+            }
+                else{
+                  $rate_law_type = "Function";
+                }
                 push @local_args, @{$param->Ref->Args};
             }
             else
@@ -930,8 +935,12 @@ sub toXML
     {   # separate handling for Function ratelaws
         return $rl->toXMLFunction($indent, $rr_id, $plist, $rrefs);
     }
-
-    if ( $rl->Type eq "FunctionProduct" )
+    if ( $rl->Type eq "RHSFunction" )
+    {   # separate handling for RHS
+        Function ratelaws
+        return $rl->toXMLRHSFunction($indent, $rr_id, $plist, $rrefs);
+    }
+  if ( $rl->Type eq "FunctionProduct" )
     {   # separate handling for FunctionProduct ratelaws
         return $rl->toXMLFunctionProduct($indent, $rr_id, $plist, $rrefs);
     }
@@ -1055,7 +1064,62 @@ sub toXMLFunction
 ###
 ###
 ###
+sub toXMLRHSFunction
+{
+    my $rl      = shift;
+    my $indent  = shift;
+    my $rr_id   = (@_) ? shift : '';       # rxn rule id
+    my $plist   = (@_) ? shift : undef;    # parameter list
+    my $rrefs   = (@_) ? shift : undef;    # rxnrule reference hash
 
+    # define ratelaw id
+    my $id;
+    if ( $rr_id ) 
+    {   $id = $rr_id . "_RateLaw";   }
+    else
+    {   $id = "RateLaw" . $RateLaw::n_RateLaw;   }
+
+
+    # Write ratelaw header and attributes:
+    my $string = $indent . "<RateLaw";
+    #  id
+    $string .= " id=\"" . $id . "\"";
+    #  type
+    $string .= " type=\"" . "Function" . "\""; #ALi Valehi temperory NFsim should learn how to deal with RHSfunction type
+    #  reference
+    $string .= " name=\"" . $rl->Constants->[0] . "\"";
+    #  total rate attribute
+    $string .= " totalrate=\"" . $rl->TotalRate . "\"";
+    # end of attributes
+    $string .= ">\n";
+
+    # Write References
+    my $indent2 = $indent.'  ';
+    my ( $param, $err ) = $plist->lookup( $rl->Constants->[0] );
+    my $fun = $param->Ref;
+    $string .= $indent2 . "<ListOfArguments>\n";
+    foreach my $arg ( @{$fun->Args} )
+    {
+        my $indent3 = $indent2.'  ';
+        my $ptr = $rrefs->{$arg};
+        my $oid = RxnRule::pointer_to_ID( $rr_id . "_P", $ptr );
+        $string .= $indent3 . "<Argument";
+        $string .= " id=\"" . $arg . "\"";
+        $string .= " type=\"ObjectReference\"";
+        $string .= " value=\"" . $oid . "\"";
+        $string .= "/>\n";
+    }
+    $string .= $indent2 . "</ListOfArguments>\n";
+
+    # Termination
+    $string .= $indent . "</RateLaw>\n";
+
+    return ($string);
+}
+
+###
+###
+###
 
 sub toXMLFunctionProduct
 {
@@ -1205,6 +1269,10 @@ sub validate
         }
     }
     elsif ( $rl->Type eq "Function" )
+    {
+        # Validate local arguments here ?
+    }
+        elsif ( $rl->Type eq "RHSFunction" )
     {
         # Validate local arguments here ?
     }

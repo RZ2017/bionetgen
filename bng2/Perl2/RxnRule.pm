@@ -429,7 +429,7 @@ sub newRxnRule
 		last unless $1;
 	}
 
-	
+	my $RHS_flag=0;
 	# Check for labels found in Reactants but not Products and vice versa...
     while ( my ($label, $resolution) = each %labels )
     {
@@ -448,6 +448,11 @@ sub newRxnRule
                      ."Please double-check rule if this is not your intention.";
             BNGUtils::line_warning($msg, $linenum);
         }
+         elsif ( $resolution =~ /^(PP)$/ )
+        {
+            $RHS_flag =1;
+        }
+
     }
 
 
@@ -460,6 +465,10 @@ sub newRxnRule
     # (default behavior is PerSite rate)
     if ( $string =~ s/(^|\s)TotalRate(\s|$)/$2/ )
     {   $TotalRate = 1;   }
+    if (%prefs and $RHS_flag eq 1) {
+       $string = $string."#tag=RHS"; 
+     setRefs( \%prefs, '', $plist );
+    }
 
     # Extract the Ratelaws..
 
@@ -711,7 +720,10 @@ sub newRxnRule
 		if ( $err = $rr->findMap($mtlist) ) { return [], $err; }
 		push @$rrs, $rr;
 	}
-
+    if (%prefs and $RHS_flag eq 1)
+    {
+        $rr->RRefs( {%prefs} );
+    }
 	return $rrs;
 }
 
